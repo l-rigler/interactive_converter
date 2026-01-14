@@ -70,39 +70,8 @@ from nnunetv2.training.data_augmentation.custom_transforms.cascade_transforms im
 from nnunetv2.training.data_augmentation.custom_transforms.deep_supervision_donwsampling import (
     DownsampleSegForDSTransform2,
 )
-# from nnunetv2.training.data_augmentation.custom_transforms.limited_length_multithreaded_augmenter import (
-#     LimitedLenWrapper,
-# )
-# from nnunetv2.training.data_augmentation.custom_transforms.masking import MaskTransform
-# from nnunetv2.training.data_augmentation.custom_transforms.region_based_training import (
-#     ConvertSegmentationToRegionsTransform,
-# )
-# from nnunetv2.training.data_augmentation.custom_transforms.transforms_for_dummy_2d import (
-#     Convert2DTo3DTransform,
-#     Convert3DTo2DTransform,
-# )
-# from nnunetv2.training.dataloading.data_loader_2d import nnUNetDataLoader2D
-# from nnunetv2.training.dataloading.data_loader_3d import nnUNetDataLoader3D
-# from nnunetv2.training.dataloading.nnunet_dataset import nnUNetDataset
-# from nnunetv2.training.dataloading.utils import get_case_identifiers, unpack_dataset
-# from nnunetv2.training.logging.nnunet_logger import nnUNetLogger
-# from nnunetv2.training.loss.compound_losses import DC_and_CE_loss, DC_and_BCE_loss
-# from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
+
 from nnunetv2.training.loss.dice import get_tp_fp_fn_tn, MemoryEfficientSoftDiceLoss
-# from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
-# from nnunetv2.utilities.collate_outputs import collate_outputs
-# from nnunetv2.utilities.default_n_proc_DA import get_allowed_n_proc_DA
-# from nnunetv2.utilities.file_path_utilities import check_workers_alive_and_busy
-# from nnunetv2.utilities.get_network_from_plans import get_network_from_plans
-# from nnunetv2.utilities.helpers import empty_cache, dummy_context
-# from nnunetv2.utilities.label_handling.label_handling import (
-#     convert_labelmap_to_one_hot,
-#     determine_num_input_channels,
-# )
-# from nnunetv2.utilities.plans_handling.plans_handler import (
-#     PlansManager,
-#     ConfigurationManager,
-# )
 
 from nnunetv2.training.loss.compound_losses import DC_and_CE_loss
 from nnunetv2.training.loss.dice import SoftDiceLoss
@@ -157,7 +126,7 @@ from torch.cuda import device_count
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from nnunetv2.training.nnUNetTrainer.git_repo import my_utils as Mutils
-import utils 
+from . import utils 
 class Trainer_test(nnUNetTrainer.nnUNetTrainer):
     """custom nnUNet Trainer that train also for interactive segmentation and prediction refinement"""
 
@@ -232,8 +201,8 @@ class Trainer_test(nnUNetTrainer.nnUNetTrainer):
                                            num_output_channels,
                                            enable_deep_supervision)
         network = utils.modify_network_for_click_in_training(network,len(self.label_manager.label_dict))
-        breakpoint()
-
+        return network
+    
     def add_guidance(self,data,target,training_mode=True,mode='global'):
         return Mutils.click_simulation_normalized(self,data,target,training_mode,click_mode=mode)
     
@@ -241,12 +210,19 @@ class Trainer_test(nnUNetTrainer.nnUNetTrainer):
     
         data = batch["data"]
         target = batch["target"]
+        
+        #creating and adding click chans to data :
+        click_chans = torch.zeros((data.shape[0],
+                                   len(self.label_manager.label_dict),
+                                    *data.shape[2:]))
+        data = torch.concatenate((data,click_chans),dim = 1)
         data = data.to(self.device, non_blocking=True)
+        
+        
         if isinstance(target, list):
             target = [i.to(self.device, non_blocking=True) for i in target]
         else:
             target = target.to(self.device, non_blocking=True)
-        data[:,1:]=data[:,1:]*0
         if self.current_epoch> 0 :
             with torch.no_grad():
                 net_output0=self.network(data)

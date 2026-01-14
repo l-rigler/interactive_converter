@@ -83,4 +83,3 @@ def modify_network_for_click_in_training(network,n_chan_add):
     network.encoder.stages[0][0].convs[0].conv.bias.register_hook(bias_grad_to_0)
     
     return network
-breakpoint()
