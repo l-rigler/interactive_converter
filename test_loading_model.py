@@ -42,7 +42,10 @@ def put_grad_to_0(grad):
     grad = grad.clone()
     grad[:,0] = 0 
     return grad
-
+def bias_grad_to_0(grad):
+    grad[0] = 0 
+    return grad
 network.encoder.stages[0][0].convs[0].conv.weight.register_hook(put_grad_to_0)
+network.encoder.stages[0][0].convs[0].conv.bias.register_hook(bias_grad_to_0)
 
 breakpoint()
