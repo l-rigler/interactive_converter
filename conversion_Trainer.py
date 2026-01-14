@@ -109,6 +109,8 @@ from nnunetv2.training.loss.dice import SoftDiceLoss
 
 from torch.nn.functional import cross_entropy
 
+#TO ERASE LATER -> already in loss.py 
+
 class region_loss(DC_and_CE_loss):
     def __init__(self, soft_dice_kwargs, ce_kwargs, weight_ce=1, weight_dice = 0, ignore_label=None,
                         dice_class = SoftDiceLoss):
@@ -155,8 +157,7 @@ from torch.cuda import device_count
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from nnunetv2.training.nnUNetTrainer.git_repo import my_utils as Mutils
-from nnunetv2.training.nnUNetTrainer.git_repo import my_utils as Mutils
-
+import utils 
 class Trainer_test(nnUNetTrainer.nnUNetTrainer):
     """custom nnUNet Trainer that train also for interactive segmentation and prediction refinement"""
 
@@ -186,8 +187,6 @@ class Trainer_test(nnUNetTrainer.nnUNetTrainer):
         )
         self.dataset_json = dataset_json  # info on the dataset -> maybe not useful
         
-        self.incr = 0
-        self.epoch_incr = 0
         self.enable_deep_supervision = True
         self.num_epochs = 800 #change this to change max number of epoch 
         self.N_alpha = 800
@@ -215,6 +214,25 @@ class Trainer_test(nnUNetTrainer.nnUNetTrainer):
                 # now wrap the loss
                 loss = Mutils.DeepSupervisionWrapper(loss,deep_supervision_scales,weights)
         return loss
+
+    def build_network_architecture(self,architecture_class_name: str,
+                                   arch_init_kwargs: dict,
+                                   arch_init_kwargs_req_import: Union[List[str], Tuple[str, ...]],
+                                   num_input_channels: int,
+                                   num_output_channels: int,
+                                   enable_deep_supervision: bool = True) -> nn.Module:
+        """
+        here we modify the nnunet function to adapt the network architecture in order 
+        to accept click + we freeze the encoder for training
+        """
+        network = super().build_network_architecture(architecture_class_name,
+                                           arch_init_kwargs,
+                                           arch_init_kwargs_req_import,
+                                           num_input_channels,
+                                           num_output_channels,
+                                           enable_deep_supervision)
+        network = utils.modify_network_for_click_in_training(network,len(self.label_manager.label_dict))
+        breakpoint()
 
     def add_guidance(self,data,target,training_mode=True,mode='global'):
         return Mutils.click_simulation_normalized(self,data,target,training_mode,click_mode=mode)
@@ -247,7 +265,6 @@ class Trainer_test(nnUNetTrainer.nnUNetTrainer):
             output = self.network(data)
             if self.current_epoch> 0 :
                 self.loss.click_map = torch.sum(torch.where(click_map>0,1,0),axis=1)
-                self.loss.loss.alpha = np.exp(-5*(self.current_epoch/self.N_alpha))
             l=self.loss(output,target)
         if self.grad_scaler is not None:
             self.grad_scaler.scale(l).backward()
